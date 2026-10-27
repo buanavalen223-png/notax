@@ -40,3 +40,8 @@ Paket spesifikasi awal untuk membangun **Nota**, aplikasi pengelolaan keuangan p
 - Status implementasi yang benar-benar sudah dikerjakan: `HANDOFF.md`
 
 Jika ada konflik antar dokumen, agent harus berhenti pada bagian yang terdampak, menjelaskan konflik, lalu meminta keputusan. Jangan diam-diam memilih asumsi besar atau mengubah scope.
+
+
+## Implementation prompts
+
+Use [`MILESTONES.md`](MILESTONES.md) as the step-by-step prompt pack for Gemini 4 Argon. Run one milestone at a time and wait for review at each gate.
