@@ -45,9 +45,13 @@ export interface TransactionFilterCriteria {
   period?: DateRangePeriod;
   /** Optional filter by `'income'` or `'expense'` */
   type?: TransactionType;
+  /** Optional filter by specific `accountId` (`CashAccount`) */
+  accountId?: string;
+  /** Optional filter by specific `fundId` (`Fund`) */
+  fundId?: string;
   /** Optional filter by specific `categoryId` */
   categoryId?: string;
-  /** Optional case-insensitive search query matched against transaction note and category name */
+  /** Optional case-insensitive search query matched against note, category name, donor/payee, and referenceNo */
   searchQuery?: string;
 }
 
@@ -135,14 +139,26 @@ export function filterTransactions(
     if (criteria.type && tx.type !== criteria.type) {
       return false;
     }
+    if (criteria.accountId && tx.accountId !== criteria.accountId) {
+      return false;
+    }
+    if (criteria.fundId && tx.fundId !== criteria.fundId) {
+      return false;
+    }
     if (criteria.categoryId && tx.categoryId !== criteria.categoryId) {
       return false;
     }
     if (normalizedQuery.length > 0) {
       const noteMatch = (tx.note ?? '').toLowerCase().includes(normalizedQuery);
+      const donorMatch = (tx.donorOrPayee ?? '')
+        .toLowerCase()
+        .includes(normalizedQuery);
+      const refMatch = (tx.referenceNo ?? '')
+        .toLowerCase()
+        .includes(normalizedQuery);
       const categoryName = categoryNameMap.get(tx.categoryId) ?? '';
       const categoryMatch = categoryName.includes(normalizedQuery);
-      if (!noteMatch && !categoryMatch) {
+      if (!noteMatch && !donorMatch && !refMatch && !categoryMatch) {
         return false;
       }
     }

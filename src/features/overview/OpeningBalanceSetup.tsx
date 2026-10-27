@@ -1,15 +1,34 @@
 import { type FormEvent, useState } from 'react';
-import { AlertCircle, ShieldCheck, X } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, ShieldCheck, X } from 'lucide-react';
 import { MAX_IDR_AMOUNT, isValidOpeningBalance } from '../../domain/money';
+import type { CashAccount, Fund } from '../../domain/mosque';
 import { formatIDR, formatIdrDigits, parseIdrInputDigits } from '../../lib/format';
 
+export interface OpeningBalanceSetupDetails {
+  mosqueName?: string;
+  mosqueAddress?: string;
+  accountOpeningBalances?: Record<string, number>;
+  fundOpeningBalances?: Record<string, number>;
+}
+
 interface OpeningBalanceSetupProps {
-  /** Current opening balance in integer IDR */
+  /** Current total opening balance in integer IDR */
   initialOpeningBalance: number;
   /** True if this is the first-run onboarding flow; false if editing later */
   isFirstRun: boolean;
-  /** Async handler that persists the opening balance via the repository */
-  onSave: (openingBalance: number) => Promise<void>;
+  /** Optional current mosque name */
+  initialMosqueName?: string;
+  /** Optional current mosque address */
+  initialMosqueAddress?: string;
+  /** Optional CashAccounts for detailed per-account opening balance setup */
+  accounts?: readonly CashAccount[];
+  /** Optional Funds for detailed per-fund opening balance setup */
+  funds?: readonly Fund[];
+  /** Async handler that persists the opening balance (and optional Mosque details) via the repository */
+  onSave: (
+    openingBalance: number,
+    details?: OpeningBalanceSetupDetails,
+  ) => Promise<void>;
   /** Optional cancel handler when editing an already-completed setup */
   onCancel?: () => void;
 }
@@ -17,28 +36,95 @@ interface OpeningBalanceSetupProps {
 export function OpeningBalanceSetup({
   initialOpeningBalance,
   isFirstRun,
+  initialMosqueName = '',
+  initialMosqueAddress = '',
+  accounts = [],
+  funds = [],
   onSave,
   onCancel,
 }: OpeningBalanceSetupProps) {
+  const [mosqueName, setMosqueName] = useState<string>(initialMosqueName);
+  const [mosqueAddress, setMosqueAddress] = useState<string>(
+    initialMosqueAddress,
+  );
   const [rawInput, setRawInput] = useState<string>(
     initialOpeningBalance > 0 ? formatIdrDigits(initialOpeningBalance) : '0',
   );
+  const [showDetailedSplit, setShowDetailedSplit] = useState<boolean>(false);
+  const [accountRawInputs, setAccountRawInputs] = useState<
+    Record<string, string>
+  >(() => {
+    const map: Record<string, string> = {};
+    for (const acc of accounts) {
+      map[acc.id] =
+        acc.openingBalance > 0 ? formatIdrDigits(acc.openingBalance) : '0';
+    }
+    return map;
+  });
+  const [fundRawInputs, setFundRawInputs] = useState<Record<string, string>>(
+    () => {
+      const map: Record<string, string> = {};
+      for (const fund of funds) {
+        map[fund.id] =
+          fund.openingBalance > 0 ? formatIdrDigits(fund.openingBalance) : '0';
+      }
+      return map;
+    },
+  );
+
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const parsedValue = parseIdrInputDigits(rawInput);
 
-  function handleInputChange(value: string) {
-    setErrorMessage(null);
+  function sanitizeIdrInput(value: string): string | null {
     const digitsOnly = value.replace(/\D/g, '');
     if (digitsOnly.length === 0) {
-      setRawInput('');
-      return;
+      return '';
     }
     const numeric = Number(digitsOnly);
     if (Number.isSafeInteger(numeric) && numeric <= MAX_IDR_AMOUNT) {
-      setRawInput(formatIdrDigits(numeric));
+      return formatIdrDigits(numeric);
     }
+    return null;
+  }
+
+  function handleInputChange(value: string) {
+    setErrorMessage(null);
+    const formatted = sanitizeIdrInput(value);
+    if (formatted !== null) {
+      setRawInput(formatted);
+    }
+  }
+
+  function handleAccountInputChange(accountId: string, value: string) {
+    setErrorMessage(null);
+    const formatted = sanitizeIdrInput(value);
+    if (formatted === null) {
+      return;
+    }
+    const nextMap = { ...accountRawInputs, [accountId]: formatted };
+    setAccountRawInputs(nextMap);
+
+    // Automatically update the primary total opening balance input to match sum of accounts
+    let totalAcc = 0;
+    for (const acc of accounts) {
+      const rawVal = nextMap[acc.id] ?? '0';
+      const parsed = rawVal.trim() === '' ? 0 : (parseIdrInputDigits(rawVal) ?? 0);
+      totalAcc += parsed;
+    }
+    if (Number.isSafeInteger(totalAcc) && totalAcc <= MAX_IDR_AMOUNT) {
+      setRawInput(formatIdrDigits(totalAcc));
+    }
+  }
+
+  function handleFundInputChange(fundId: string, value: string) {
+    setErrorMessage(null);
+    const formatted = sanitizeIdrInput(value);
+    if (formatted === null) {
+      return;
+    }
+    setFundRawInputs((prev) => ({ ...prev, [fundId]: formatted }));
   }
 
   async function submitOpeningBalance(candidateAmount: number | null) {
@@ -51,9 +137,51 @@ export function OpeningBalanceSetup({
       return;
     }
 
+    const details: OpeningBalanceSetupDetails = {};
+    if (mosqueName.trim().length > 0) {
+      details.mosqueName = mosqueName.trim();
+    }
+    if (mosqueAddress.trim().length > 0) {
+      details.mosqueAddress = mosqueAddress.trim();
+    }
+
+    if (showDetailedSplit && accounts.length > 0 && funds.length > 0) {
+      const accMap: Record<string, number> = {};
+      for (const acc of accounts) {
+        const raw = accountRawInputs[acc.id] ?? '0';
+        const val = raw.trim() === '' ? 0 : parseIdrInputDigits(raw);
+        if (val === null || !isValidOpeningBalance(val)) {
+          setErrorMessage(
+            `Saldo awal untuk ${acc.name} harus berupa bilangan bulat Rupiah yang valid.`,
+          );
+          return;
+        }
+        accMap[acc.id] = val;
+      }
+
+      const fMap: Record<string, number> = {};
+      for (const fund of funds) {
+        const raw = fundRawInputs[fund.id] ?? '0';
+        const val = raw.trim() === '' ? 0 : parseIdrInputDigits(raw);
+        if (val === null || !isValidOpeningBalance(val)) {
+          setErrorMessage(
+            `Saldo awal untuk ${fund.name} harus berupa bilangan bulat Rupiah yang valid.`,
+          );
+          return;
+        }
+        fMap[fund.id] = val;
+      }
+
+      details.accountOpeningBalances = accMap;
+      details.fundOpeningBalances = fMap;
+    }
+
     setIsSaving(true);
     try {
-      await onSave(candidateAmount);
+      await onSave(
+        candidateAmount,
+        Object.keys(details).length > 0 ? details : undefined,
+      );
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -87,8 +215,9 @@ export function OpeningBalanceSetup({
               : 'Ubah saldo awal catatan'}
           </h2>
           <p className="text-xs sm:text-sm text-nota-muted max-w-2xl">
-            Saldo awal menjadi titik mulai sebelum transaksi dihitung dan tidak
-            masuk sebagai pemasukan bulan berjalan.
+            Saldo awal kas masjid menjadi titik mulai pembukuan DKM sebelum
+            transaksi berjalan dihitung dan tidak dihitung sebagai pemasukan
+            periode berjalan.
           </p>
         </div>
 
@@ -107,6 +236,48 @@ export function OpeningBalanceSetup({
       </div>
 
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label
+              htmlFor="setup-mosque-name-input"
+              className="block text-xs font-medium text-nota-muted"
+            >
+              Nama Masjid / Musholla (opsional)
+            </label>
+            <input
+              id="setup-mosque-name-input"
+              name="mosqueName"
+              type="text"
+              disabled={isSaving}
+              value={mosqueName}
+              onChange={(e) => setMosqueName(e.target.value)}
+              placeholder="Contoh: Masjid Jami Al-Ikhlas"
+              maxLength={80}
+              className="w-full rounded-panel border border-nota-border bg-nota-bg px-3.5 py-2 text-sm font-medium text-nota-ink placeholder:text-nota-muted/60 focus:border-nota-emerald focus:bg-nota-surface"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor="setup-mosque-address-input"
+              className="block text-xs font-medium text-nota-muted"
+            >
+              Alamat singkat masjid (opsional)
+            </label>
+            <input
+              id="setup-mosque-address-input"
+              name="mosqueAddress"
+              type="text"
+              disabled={isSaving}
+              value={mosqueAddress}
+              onChange={(e) => setMosqueAddress(e.target.value)}
+              placeholder="Contoh: Jl. Melati No. 10, Kec. Sukmajaya"
+              maxLength={160}
+              className="w-full rounded-panel border border-nota-border bg-nota-bg px-3.5 py-2 text-sm font-medium text-nota-ink placeholder:text-nota-muted/60 focus:border-nota-emerald focus:bg-nota-surface"
+            />
+          </div>
+        </div>
+
         <div className="flex flex-col sm:flex-row sm:items-end gap-3">
           <div className="w-full sm:max-w-xs space-y-1.5">
             <label
@@ -169,6 +340,22 @@ export function OpeningBalanceSetup({
                 Mulai dari Rp 0
               </button>
             ) : null}
+
+            {accounts.length > 0 && funds.length > 0 ? (
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => setShowDetailedSplit((prev) => !prev)}
+                className="inline-flex items-center gap-1.5 rounded-control border border-nota-border bg-nota-bg px-3.5 py-2.5 text-xs font-medium text-nota-ink hover:bg-nota-soft-green/50 transition-colors cursor-pointer"
+              >
+                {showDetailedSplit ? (
+                  <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                Rincian per Kas & Dana
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -178,6 +365,68 @@ export function OpeningBalanceSetup({
             {formatIDR(parsedValue ?? 0)}
           </span>
         </p>
+
+        {showDetailedSplit && accounts.length > 0 && funds.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 rounded-panel border border-nota-border/70 bg-nota-bg/60 p-4">
+            <div className="space-y-2.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-nota-muted">
+                Saldo Awal per Lokasi Kas
+              </h3>
+              {accounts
+                .filter((acc) => !acc.archivedAt)
+                .map((acc) => (
+                  <div key={acc.id} className="space-y-1">
+                    <label
+                      htmlFor={`setup-acc-opening-${acc.id}`}
+                      className="block text-xs font-medium text-nota-ink"
+                    >
+                      {acc.name} (IDR)
+                    </label>
+                    <input
+                      id={`setup-acc-opening-${acc.id}`}
+                      type="text"
+                      inputMode="numeric"
+                      disabled={isSaving}
+                      value={accountRawInputs[acc.id] ?? '0'}
+                      onChange={(e) =>
+                        handleAccountInputChange(acc.id, e.target.value)
+                      }
+                      className="w-full rounded-panel border border-nota-border bg-nota-surface px-3 py-2 text-sm font-semibold text-nota-ink tabular-nums"
+                    />
+                  </div>
+                ))}
+            </div>
+
+            <div className="space-y-2.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-nota-muted">
+                Alokasi Saldo Awal per Dana Masjid
+              </h3>
+              {funds
+                .filter((f) => !f.archivedAt)
+                .map((fund) => (
+                  <div key={fund.id} className="space-y-1">
+                    <label
+                      htmlFor={`setup-fund-opening-${fund.id}`}
+                      className="block text-xs font-medium text-nota-ink"
+                    >
+                      {fund.name} (IDR)
+                    </label>
+                    <input
+                      id={`setup-fund-opening-${fund.id}`}
+                      type="text"
+                      inputMode="numeric"
+                      disabled={isSaving}
+                      value={fundRawInputs[fund.id] ?? '0'}
+                      onChange={(e) =>
+                        handleFundInputChange(fund.id, e.target.value)
+                      }
+                      className="w-full rounded-panel border border-nota-border bg-nota-surface px-3 py-2 text-sm font-semibold text-nota-ink tabular-nums"
+                    />
+                  </div>
+                ))}
+            </div>
+          </div>
+        ) : null}
 
         {errorMessage ? (
           <div

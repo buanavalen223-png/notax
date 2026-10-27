@@ -21,6 +21,16 @@ import type {
   DebtRecordInput,
   DebtRecordPatch,
 } from '../../domain/debtRecord';
+import {
+  type CashAccountInput,
+  type CashAccountPatch,
+  type CashTransferInput,
+  DEFAULT_CASH_ACCOUNT_TUNAI_ID,
+  DEFAULT_FUND_OPERASIONAL_ID,
+  type FundInput,
+  type FundPatch,
+  type FundRestriction,
+} from '../../domain/mosque';
 import type {
   SavingsGoalInput,
   SavingsGoalPatch,
@@ -44,12 +54,16 @@ import {
   formatYearMonthID,
 } from '../../lib/format';
 import { BackupRestoreSection } from '../backup/BackupRestoreSection';
+import { CashAndFundsSection } from '../mosque/CashAndFundsSection';
 import { CategoryBudgetSection } from '../planning/CategoryBudgetSection';
 import { DebtRecordSection } from '../planning/DebtRecordSection';
 import { SavingsGoalSection } from '../planning/SavingsGoalSection';
 import { TransactionFormModal } from '../transactions/TransactionFormModal';
 import { TransactionListSection } from '../transactions/TransactionListSection';
-import { OpeningBalanceSetup } from './OpeningBalanceSetup';
+import {
+  OpeningBalanceSetup,
+  type OpeningBalanceSetupDetails,
+} from './OpeningBalanceSetup';
 
 const RECENT_TRANSACTIONS_LIMIT = 5;
 const TOP_EXPENSE_CATEGORIES_LIMIT = 4;
@@ -137,13 +151,83 @@ export function OverviewFoundationPage({
     void loadData();
   }, [loadData]);
 
-  async function handleSaveOpeningBalance(newOpeningBalance: number) {
-    await repository.saveOpeningBalance(newOpeningBalance, {
-      completeOnboarding: true,
-    });
+  async function handleSaveOpeningBalance(
+    newOpeningBalance: number,
+    details?: OpeningBalanceSetupDetails,
+  ) {
+    if (
+      details &&
+      (details.mosqueName !== undefined ||
+        details.mosqueAddress !== undefined ||
+        details.accountOpeningBalances !== undefined ||
+        details.fundOpeningBalances !== undefined)
+    ) {
+      if (details.accountOpeningBalances || details.fundOpeningBalances) {
+        await repository.saveInitialSetup({
+          mosqueName: details.mosqueName,
+          mosqueAddress: details.mosqueAddress,
+          accountOpeningBalances: details.accountOpeningBalances,
+          fundOpeningBalances: details.fundOpeningBalances,
+          completeOnboarding: true,
+        });
+      } else {
+        await repository.saveOpeningBalance(newOpeningBalance, {
+          completeOnboarding: true,
+        });
+        if (details.mosqueName) {
+          await repository.saveMosqueProfile({
+            mosqueName: details.mosqueName,
+            mosqueAddress: details.mosqueAddress,
+          });
+        }
+      }
+    } else {
+      await repository.saveOpeningBalance(newOpeningBalance, {
+        completeOnboarding: true,
+      });
+    }
     const refreshed = await repository.loadWorkspaceState(selectedPeriod);
     setWorkspace(refreshed);
     setIsEditingOpeningBalance(false);
+  }
+
+  async function handleAddAccount(input: CashAccountInput) {
+    await repository.addAccount(input);
+    const refreshed = await repository.loadWorkspaceState(selectedPeriod);
+    setWorkspace(refreshed);
+  }
+
+  async function handleUpdateAccount(
+    accountId: string,
+    patch: CashAccountPatch,
+  ) {
+    await repository.updateAccount(accountId, patch);
+    const refreshed = await repository.loadWorkspaceState(selectedPeriod);
+    setWorkspace(refreshed);
+  }
+
+  async function handleAddFund(input: FundInput) {
+    await repository.addFund(input);
+    const refreshed = await repository.loadWorkspaceState(selectedPeriod);
+    setWorkspace(refreshed);
+  }
+
+  async function handleUpdateFund(fundId: string, patch: FundPatch) {
+    await repository.updateFund(fundId, patch);
+    const refreshed = await repository.loadWorkspaceState(selectedPeriod);
+    setWorkspace(refreshed);
+  }
+
+  async function handleAddCashTransfer(input: CashTransferInput) {
+    await repository.addCashTransfer(input);
+    const refreshed = await repository.loadWorkspaceState(selectedPeriod);
+    setWorkspace(refreshed);
+  }
+
+  async function handleDeleteCashTransfer(transferId: string) {
+    await repository.deleteCashTransfer(transferId);
+    const refreshed = await repository.loadWorkspaceState(selectedPeriod);
+    setWorkspace(refreshed);
   }
 
   async function handleCreateTransaction(draft: TransactionDraft) {
@@ -279,6 +363,27 @@ export function OverviewFoundationPage({
     );
   }, [workspace]);
 
+  const fundMap = useMemo(() => {
+    if (!workspace) {
+      return new Map<string, { name: string; restriction: FundRestriction }>();
+    }
+    return new Map(
+      workspace.funds.map((fund) => [
+        fund.id,
+        { name: fund.name, restriction: fund.restriction },
+      ]),
+    );
+  }, [workspace]);
+
+  const accountMap = useMemo(() => {
+    if (!workspace) {
+      return new Map<string, { name: string }>();
+    }
+    return new Map(
+      workspace.accounts.map((acc) => [acc.id, { name: acc.name }]),
+    );
+  }, [workspace]);
+
   const topExpenseCategories = useMemo(() => {
     if (!workspace) {
       return [];
@@ -332,11 +437,15 @@ export function OverviewFoundationPage({
             <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-nota-ink">
               {activeRoute === 'transactions'
                 ? 'Manajemen Transaksi'
-                : activeRoute === 'planning'
-                  ? 'Perencanaan Keuangan'
-                  : activeRoute === 'settings'
-                    ? 'Pengaturan & Data Lokal'
-                    : 'Ringkasan Keuangan'}
+                : activeRoute === 'cash-and-funds'
+                  ? 'Lokasi Kas & Dana Masjid'
+                  : activeRoute === 'planning'
+                    ? 'Perencanaan Keuangan'
+                    : activeRoute === 'reports'
+                      ? 'Laporan Keuangan Masjid'
+                      : activeRoute === 'settings'
+                        ? 'Pengaturan & Data Lokal'
+                        : 'Ringkasan Keuangan'}
             </h1>
             {isLoading && workspace === null && !storageError ? (
               <span
@@ -351,11 +460,15 @@ export function OverviewFoundationPage({
           <p className="text-xs sm:text-sm text-nota-muted">
             {activeRoute === 'transactions'
               ? 'Catat, cari, saring, dan kelola seluruh riwayat pemasukan serta pengeluaran Anda.'
-              : activeRoute === 'planning'
-                ? 'Kelola anggaran kategori bulanan, target tabungan, serta catatan utang dan piutang.'
-                : activeRoute === 'settings'
-                  ? 'Kelola saldo awal pencatatan serta pencadangan dan pemulihan data lokal di perangkat ini.'
-                  : 'Posisi saldo tercatat dan pergerakan arus kas periode terpilih.'}
+              : activeRoute === 'cash-and-funds'
+                ? 'Kelola posisi Kas Tunai, Rekening Bank Tercatat, alokasi Dana Amanah, dan mutasi antar-kas masjid.'
+                : activeRoute === 'planning'
+                  ? 'Kelola anggaran kategori bulanan, target tabungan, serta catatan utang dan piutang.'
+                  : activeRoute === 'reports'
+                    ? 'Ringkasan pertanggungjawaban kas masjid untuk jamaah dan pengurus DKM.'
+                    : activeRoute === 'settings'
+                      ? 'Kelola saldo awal pencatatan serta pencadangan dan pemulihan data lokal di perangkat ini.'
+                      : 'Posisi saldo tercatat dan pergerakan arus kas periode terpilih.'}
           </p>
         </div>
 
@@ -495,6 +608,10 @@ export function OverviewFoundationPage({
         <OpeningBalanceSetup
           key={`${workspace.settings.onboardingCompleted}-${workspace.settings.openingBalance}`}
           initialOpeningBalance={workspace.settings.openingBalance}
+          initialMosqueName={workspace.settings.mosqueName}
+          initialMosqueAddress={workspace.settings.mosqueAddress}
+          accounts={workspace.accounts}
+          funds={workspace.funds}
           isFirstRun={!workspace.settings.onboardingCompleted}
           onSave={handleSaveOpeningBalance}
           onCancel={
@@ -506,7 +623,7 @@ export function OverviewFoundationPage({
       ) : null}
 
       {/* =====================================================================
-          TAB 1: RINGKASAN (Overview Hero + Monthly Cashflow + Recent Preview)
+          TAB 1: RINGKASAN (Overview Hero + Mosque Fund/Account Split + Cashflow)
          ===================================================================== */}
       {activeRoute === 'overview' ? (
         <>
@@ -516,7 +633,7 @@ export function OverviewFoundationPage({
             className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5"
           >
             {/* Left Primary Balance Area (7 cols on desktop) */}
-            <div className="lg:col-span-7 rounded-hero bg-nota-surface p-6 sm:p-8 border border-nota-border/70 flex flex-col justify-between gap-8">
+            <div className="lg:col-span-7 rounded-hero bg-nota-surface p-6 sm:p-8 border border-nota-border/70 flex flex-col justify-between gap-6">
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-medium text-nota-muted">
@@ -545,6 +662,50 @@ export function OverviewFoundationPage({
                       ? formatSignedIDR(currentBalance)
                       : formatIDR(currentBalance)}
                 </p>
+
+                {/* Mosque Fund Split: Dana Operasional Umum vs Dana Terikat (Amanah) */}
+                {!storageError && workspace ? (
+                  <div
+                    data-testid="overview-mosque-fund-split"
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1"
+                  >
+                    <div className="rounded-panel bg-nota-soft-green/45 px-3.5 py-2.5 border border-nota-emerald/15">
+                      <span className="text-[11px] font-medium text-nota-emerald block">
+                        Dana Operasional Umum (Bebas)
+                      </span>
+                      <span
+                        data-testid="overview-unrestricted-balance"
+                        className="mt-0.5 block text-sm sm:text-base font-semibold text-nota-emerald tabular-nums"
+                      >
+                        {workspace.mosqueBalanceSplit.unrestrictedBalance < 0
+                          ? formatSignedIDR(
+                              workspace.mosqueBalanceSplit.unrestrictedBalance,
+                            )
+                          : formatIDR(
+                              workspace.mosqueBalanceSplit.unrestrictedBalance,
+                            )}
+                      </span>
+                    </div>
+
+                    <div className="rounded-panel bg-nota-bg/80 px-3.5 py-2.5 border border-nota-border">
+                      <span className="text-[11px] font-medium text-nota-muted block">
+                        Total Dana Terikat (Amanah)
+                      </span>
+                      <span
+                        data-testid="overview-restricted-balance"
+                        className="mt-0.5 block text-sm sm:text-base font-semibold text-nota-ink tabular-nums"
+                      >
+                        {workspace.mosqueBalanceSplit.restrictedBalance < 0
+                          ? formatSignedIDR(
+                              workspace.mosqueBalanceSplit.restrictedBalance,
+                            )
+                          : formatIDR(
+                              workspace.mosqueBalanceSplit.restrictedBalance,
+                            )}
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               {/* Primary Quick-Entry Actions */}
@@ -629,6 +790,96 @@ export function OverviewFoundationPage({
               </div>
             </div>
           </section>
+
+          {/* Mosque Funds & Cash Accounts Position Strip */}
+          {!storageError && workspace ? (
+            <section
+              aria-label="Posisi dana dan lokasi kas masjid"
+              className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5"
+            >
+              {/* 3 Mosque Funds (7 cols) */}
+              <div className="lg:col-span-7 rounded-hero bg-nota-surface p-5 sm:p-6 border border-nota-border/70 space-y-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm sm:text-base font-semibold text-nota-ink">
+                    Posisi Dana Masjid (Amanah)
+                  </h2>
+                  {onNavigate ? (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('cash-and-funds')}
+                      className="text-xs font-medium text-nota-emerald hover:underline cursor-pointer"
+                    >
+                      Kelola Kas & Dana
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                  {workspace.mosqueBalanceSplit.fundSummaries.map((fund) => (
+                    <div
+                      key={fund.fundId}
+                      data-testid={`overview-fund-pill-${fund.fundId}`}
+                      className="rounded-panel border border-nota-border/70 bg-nota-bg/60 p-3.5 space-y-1"
+                    >
+                      <span
+                        className={`inline-block rounded-control px-2 py-0.5 text-[10px] font-semibold ${
+                          fund.restriction === 'restricted'
+                            ? 'border border-nota-ink/20 bg-nota-surface text-nota-ink'
+                            : 'bg-nota-soft-green text-nota-emerald'
+                        }`}
+                      >
+                        {fund.restriction === 'restricted'
+                          ? 'Dana Terikat'
+                          : 'Dana Umum'}
+                      </span>
+                      <p className="text-xs font-medium text-nota-ink truncate">
+                        {fund.fundName}
+                      </p>
+                      <p className="text-sm sm:text-base font-semibold text-nota-ink tabular-nums">
+                        {fund.currentBalance < 0
+                          ? formatSignedIDR(fund.currentBalance)
+                          : formatIDR(fund.currentBalance)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2 Mosque Cash Accounts (5 cols) */}
+              <div className="lg:col-span-5 rounded-hero bg-nota-surface p-5 sm:p-6 border border-nota-border/70 space-y-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm sm:text-base font-semibold text-nota-ink">
+                    Posisi Lokasi Kas
+                  </h2>
+                  <span className="text-xs text-nota-muted">
+                    Tunai & Rekening Tercatat
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {workspace.mosqueBalanceSplit.accountSummaries.map((acc) => (
+                    <div
+                      key={acc.accountId}
+                      data-testid={`overview-account-pill-${acc.accountId}`}
+                      className="rounded-panel border border-nota-border/70 bg-nota-bg/60 p-3.5 space-y-1"
+                    >
+                      <span className="text-[10px] font-medium text-nota-muted block">
+                        {acc.kind === 'cash' ? 'Kas Tunai' : 'Rekening Bank'}
+                      </span>
+                      <p className="text-xs font-medium text-nota-ink truncate">
+                        {acc.accountName}
+                      </p>
+                      <p className="text-sm sm:text-base font-semibold text-nota-ink tabular-nums">
+                        {acc.currentBalance < 0
+                          ? formatSignedIDR(acc.currentBalance)
+                          : formatIDR(acc.currentBalance)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          ) : null}
 
           {/* Overview Cashflow & Recent Transactions */}
           <section
@@ -843,6 +1094,12 @@ export function OverviewFoundationPage({
                     const categoryInfo = categoryMap.get(tx.categoryId);
                     const categoryName =
                       categoryInfo?.name ?? 'Kategori tidak dikenal';
+                    const fundInfo = fundMap.get(
+                      tx.fundId ?? DEFAULT_FUND_OPERASIONAL_ID,
+                    );
+                    const accountInfo = accountMap.get(
+                      tx.accountId ?? DEFAULT_CASH_ACCOUNT_TUNAI_ID,
+                    );
                     const isIncome = tx.type === 'income';
 
                     return (
@@ -866,8 +1123,8 @@ export function OverviewFoundationPage({
                             )}
                           </div>
 
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <p className="text-sm font-medium text-nota-ink truncate">
                                 {categoryName}
                               </p>
@@ -876,9 +1133,28 @@ export function OverviewFoundationPage({
                                   Arsip
                                 </span>
                               ) : null}
+                              {fundInfo ? (
+                                <span
+                                  className={`rounded-control px-1.5 py-0.5 text-[10px] font-medium shrink-0 ${
+                                    fundInfo.restriction === 'restricted'
+                                      ? 'border border-nota-ink/20 bg-nota-surface text-nota-ink'
+                                      : 'bg-nota-soft-green text-nota-emerald'
+                                  }`}
+                                >
+                                  {fundInfo.name}
+                                </span>
+                              ) : null}
+                              {accountInfo ? (
+                                <span className="rounded-control border border-nota-border bg-nota-surface px-1.5 py-0.5 text-[10px] font-medium text-nota-muted shrink-0">
+                                  {accountInfo.name}
+                                </span>
+                              ) : null}
                             </div>
                             <p className="text-xs text-nota-muted truncate">
                               <span>{formatLocalDateID(tx.occurredAt)}</span>
+                              {tx.donorOrPayee ? (
+                                <span> · {tx.donorOrPayee}</span>
+                              ) : null}
                               {tx.note ? <span> · {tx.note}</span> : null}
                             </p>
                           </div>
@@ -973,6 +1249,8 @@ export function OverviewFoundationPage({
             <TransactionListSection
               transactions={workspace.transactions}
               categories={workspace.categories}
+              accounts={workspace.accounts}
+              funds={workspace.funds}
               selectedPeriod={selectedPeriod}
               periodLabel={periodLabel}
               onEditTransaction={openEditForm}
@@ -985,7 +1263,25 @@ export function OverviewFoundationPage({
       ) : null}
 
       {/* =====================================================================
-          TAB 3: PERENCANAAN (Budgets, Savings Goals & Debt/Receivable Records)
+          TAB 3: KAS & DANA (Cash Accounts, Mosque Funds & Internal Transfers)
+         ===================================================================== */}
+      {activeRoute === 'cash-and-funds' && !storageError && workspace ? (
+        <CashAndFundsSection
+          accounts={workspace.accounts}
+          funds={workspace.funds}
+          cashTransfers={workspace.cashTransfers}
+          mosqueBalanceSplit={workspace.mosqueBalanceSplit}
+          onAddAccount={handleAddAccount}
+          onUpdateAccount={handleUpdateAccount}
+          onAddFund={handleAddFund}
+          onUpdateFund={handleUpdateFund}
+          onAddCashTransfer={handleAddCashTransfer}
+          onDeleteCashTransfer={handleDeleteCashTransfer}
+        />
+      ) : null}
+
+      {/* =====================================================================
+          TAB 4: ANGGARAN / RAB (Budgets, Savings Goals & Debt/Receivable Records)
          ===================================================================== */}
       {activeRoute === 'planning' ? (
         <>
@@ -1069,7 +1365,62 @@ export function OverviewFoundationPage({
       ) : null}
 
       {/* =====================================================================
-          TAB 4: PENGATURAN (Opening Balance & Local Data Backup/Restore)
+          TAB 5: LAPORAN (Mosque Financial Reports Preview — Full Print in M5)
+         ===================================================================== */}
+      {activeRoute === 'reports' && !storageError && workspace ? (
+        <section
+          aria-label="Ringkasan laporan keuangan masjid"
+          className="rounded-hero bg-nota-surface p-6 sm:p-8 border border-nota-border/70 space-y-5"
+        >
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold text-nota-ink">
+              Ringkasan Laporan Kas Masjid ({periodLabel})
+            </h2>
+            <p className="text-xs sm:text-sm text-nota-muted">
+              Rekapitulasi saldo kas dan dana amanah masjid pada periode{' '}
+              {periodLabel}.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <div className="rounded-panel bg-nota-bg/70 p-4">
+              <span className="text-xs font-medium text-nota-muted block">
+                Total Kas Masjid
+              </span>
+              <strong className="mt-1 block text-base sm:text-lg font-semibold text-nota-ink tabular-nums">
+                {formatIDR(workspace.mosqueBalanceSplit.totalBalance)}
+              </strong>
+            </div>
+            <div className="rounded-panel bg-nota-bg/70 p-4">
+              <span className="text-xs font-medium text-nota-muted block">
+                Penerimaan ({periodLabel})
+              </span>
+              <strong className="mt-1 block text-base sm:text-lg font-semibold text-nota-emerald tabular-nums">
+                +{formatIDR(periodIncome)}
+              </strong>
+            </div>
+            <div className="rounded-panel bg-nota-bg/70 p-4">
+              <span className="text-xs font-medium text-nota-muted block">
+                Pengeluaran ({periodLabel})
+              </span>
+              <strong className="mt-1 block text-base sm:text-lg font-semibold text-nota-expense tabular-nums">
+                −{formatIDR(periodExpense)}
+              </strong>
+            </div>
+            <div className="rounded-panel bg-nota-bg/70 p-4">
+              <span className="text-xs font-medium text-nota-muted block">
+                Selisih ({periodLabel})
+              </span>
+              <strong className="mt-1 block text-base sm:text-lg font-semibold text-nota-ink tabular-nums">
+                {formatSignedIDR(periodNetCashFlow)}
+              </strong>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* =====================================================================
+          TAB 6: PENGATURAN (Opening Balance & Local Data Backup/Restore)
          ===================================================================== */}
       {activeRoute === 'settings' ? (
         <div className="space-y-5 sm:space-y-6">
@@ -1183,6 +1534,11 @@ export function OverviewFoundationPage({
               : undefined
           }
           categories={workspace.categories}
+          accounts={workspace.accounts}
+          funds={workspace.funds}
+          transactions={workspace.transactions}
+          cashTransfers={workspace.cashTransfers}
+          budgetPlans={workspace.budgetPlans}
           onCreate={handleCreateTransaction}
           onUpdate={handleUpdateTransaction}
           onClose={() => setTransactionFormState(null)}

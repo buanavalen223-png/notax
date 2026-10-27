@@ -272,7 +272,7 @@ describe('Nota Milestone 1 — Domain Model & Financial Rules', () => {
 
       expect(incomeCategories.length).toBeGreaterThan(0);
       expect(expenseCategories.length).toBeGreaterThan(0);
-      expect(DEFAULT_APP_SETTINGS).toEqual({
+      expect(DEFAULT_APP_SETTINGS).toMatchObject({
         openingBalance: 0,
         currency: 'IDR',
         onboardingCompleted: false,

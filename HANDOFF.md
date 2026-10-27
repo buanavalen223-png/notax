@@ -1,60 +1,51 @@
-# HANDOFF — Nota
+# HANDOFF — Nota (Manajemen Keuangan Masjid)
 
 ## Current status
 
-- **Date / Milestone:** 2026-10-27 — Navigation Identity and Information Architecture Refinement (post-Milestone 7 Opsi A, B, & D).
-- **Product name:** Nota.
-- **Phase:** Milestones 0–6 approved; Milestone 7 (Opsi A — Monthly Budgets by Category, Opsi B — Savings Goals, Opsi D — Debt and Receivable Tracking) and Navigation Identity & Information Architecture Refinement implemented, verified, and awaiting owner review.
+- **Date / Milestone:** 2026-10-28 — **Milestone M3 (`Jurnal Transaksi Masjid, Filter Multi-Dimensi, & Konfirmasi Soft Guard`) Completed**.
+- **Product name:** Nota (Manajemen Keuangan Masjid Local-First).
+- **Phase:** Milestone M1, Milestone M2, dan Milestone M3 telah selesai diimplementasikan dan terverifikasi penuh. Formulir transaksi masjid (`TransactionFormModal`) kini mendukung pemilihan Lokasi Kas (`accountId`), Dana Masjid (`fundId` — otomatis terisi dari `defaultFundId` kategori masjid namun dapat diubah), Pos RAB opsional (`budgetPlanId`), Donatur/Penerima (`donorOrPayee`), Nomor Bukti/Referensi (`referenceNo`), serta evaluasi dan konfirmasi bendahara **Soft Guard** (`evaluateTransactionSoftGuard`). Daftar transaksi (`TransactionListSection`) dan transaksi terakhir pada `Ringkasan` kini menampilkan badge Dana & Lokasi Kas serta filter berdasarkan Lokasi Kas dan Dana Masjid. Siap melanjutkan ke **Milestone M4 (`Anggaran / RAB Masjid & Realisasi Anggaran`)**.
 - **Toolchain recorded:** Node `v26.11.1`, npm `11.20.0`, React `^19.1.0`, Vite `^6.3.1` (resolved `6.4.5`), Tailwind CSS v4 (`@tailwindcss/vite` `^4.1.4`), TypeScript `~5.8.3`, Dexie `^4.0.11`, Vitest `^3.1.1` (resolved `3.2.7`), `fake-indexeddb` `^6.0.0`, Lucide React `^1.0.0`.
 
-## Completed in Navigation Identity & Information Architecture Refinement
+## Pekerjaan yang Selesai pada Milestone M3
 
-### 1. Audit of Previous Navigation & Duplication Issues
-- Previously, `OverviewFoundationPage.tsx` rendered the 2-column Hero (`Saldo tercatat` + Lime `Selisih bulan ini`), `TransactionListSection` (`Daftar Transaksi`), `CategoryBudgetSection`, `SavingsGoalSection`, `DebtRecordSection`, and `BackupRestoreSection` across multiple tabs simultaneously.
-- As a result, `Ringkasan`, `Transaksi`, and `Perencanaan` looked nearly identical, and maintenance actions (`Cadangan & Pemulihan Data`) cluttered every primary view.
+1. **Formulir Transaksi Masjid & Konfirmasi Soft Guard (`src/features/transactions/TransactionFormModal.tsx`)**:
+   - Menambahkan pemilih **Lokasi kas transaksi (`accountId`)** yang mengutamakan `Kas Tunai` (`acc-kas-tunai`) sebagai bawaan.
+   - Menambahkan pemilih **Dana masjid (`fundId`)** lengkap dengan label sifat dana (`Dana Umum` vs `Dana Terikat`) serta pemetaan otomatis (`defaultFundId`) saat kategori transaksi dipilih.
+   - Menambahkan pemilih opsional **Pos RAB / Anggaran (`budgetPlanId`)** untuk pengeluaran ketika data RAB tersedia.
+   - Menambahkan input opsional **Donatur / Penerima (`donorOrPayee`)** dan **Nomor bukti / referensi (`referenceNo`)**.
+   - Mengintegrasikan **Banner Peringatan & Konfirmasi Soft Guard** (`evaluateTransactionSoftGuard`) untuk pengeluaran masjid yang melebihi saldo Dana (`FUND_DEFICIT`), melebihi saldo Lokasi Kas (`ACCOUNT_DEFICIT`), atau menggunakan Dana Terikat untuk kategori di luar peruntukannya (`RESTRICTED_FUND_CATEGORY_MISMATCH`), lengkap dengan kotak centang konfirmasi bendahara dan tombol konfirmasi eksplisit sebelum transaksi disimpan.
+2. **Daftar Transaksi Masjid & Filter Multi-Dimensi (`src/features/transactions/TransactionListSection.tsx` & `src/features/overview/OverviewFoundationPage.tsx`)**:
+   - Menampilkan badge **Dana Masjid (`fundId`)** dan **Lokasi Kas (`accountId`)** pada setiap baris transaksi di halaman `Transaksi` maupun daftar transaksi terakhir di halaman `Ringkasan`, beserta informasi `donorOrPayee` dan `#referenceNo`.
+   - Menambahkan dropdown **Filter dana masjid** dan **Filter lokasi kas** pada `TransactionListSection`, terintegrasi dengan pencarian kata kunci (`note`, nama kategori, `donorOrPayee`, `referenceNo`) dan tombol `Reset filter`.
+3. **Pengujian Integrasi Milestone M3 (`src/test/mosqueTransactions.test.tsx`)**:
+   - Menguji pemilihan otomatis `fundId` dari kategori masjid serta penyimpanan `accountId`, `fundId`, `donorOrPayee`, dan `referenceNo`.
+   - Menguji alur peringatan dan konfirmasi bendahara **Soft Guard** (`ACCOUNT_DEFICIT` & `RESTRICTED_FUND_CATEGORY_MISMATCH`).
+   - Menguji penyaringan transaksi berdasarkan `Filter dana masjid`, `Filter lokasi kas`, serta pencarian `donorOrPayee` dan `referenceNo`.
 
-### 2. Distinct Tab Identities & Canonical Action Homes (`src/components/layout/AppShell.tsx`, `src/features/overview/OverviewFoundationPage.tsx`)
-- **Primary Navigation (`AppShell.tsx`)**: Expanded `ActiveRoute` to `'overview' | 'transactions' | 'planning' | 'settings'` (`Ringkasan`, `Transaksi`, `Perencanaan`, `Pengaturan`) with responsive pill wrapping (`flex-wrap`) and `aria-current="page"`.
-- **Tab 1 — `Ringkasan` (`overview`)**:
-  - **Purpose**: Understand overall financial position at a glance.
-  - **Exclusive Contents**: First-run `OpeningBalanceSetup` (when onboarding is not yet completed), 2-column Asymmetric Hero (`Saldo tercatat` + quick-entry `Tambah pemasukan` / `Tambah pengeluaran`, and Lime `Selisih bulan ini` + `Pemasukan` / `Pengeluaran`), `Arus Kas Bulan Ini` (proportional bar + top 4 expense categories), and `Transaksi terakhir` (5-item recent preview with `Lihat semua ({count})` navigation to `Transaksi`).
-  - **Removed Duplication**: Removed `TransactionListSection`, `CategoryBudgetSection`, `SavingsGoalSection`, `DebtRecordSection`, and `BackupRestoreSection` from `Ringkasan`.
-- **Tab 2 — `Transaksi` (`transactions`)**:
-  - **Purpose**: Authoritative ledger workspace to record, search, filter, sort, edit, and delete individual transactions.
-  - **Exclusive Contents**: Header with month period selector and primary `Tambah pemasukan` / `Tambah pengeluaran` actions, a compact 4-metric context bar (`Saldo tercatat`, `Pemasukan`, `Pengeluaran`, `Selisih bulan ini`) instead of repeating the giant dashboard hero cards, and the full `TransactionListSection`.
-  - **Removed Duplication**: Removed the 2-column Hero cards, `Arus Kas Bulan Ini`, `Transaksi terakhir` preview, planning sections, and `BackupRestoreSection`.
-- **Tab 3 — `Perencanaan` (`planning`)**:
-  - **Purpose**: Manage monthly category budgets (`Anggaran Bulanan per Kategori`), savings goals (`Target Tabungan`), and obligation records (`Catatan Utang & Piutang`) without altering cash balance.
-  - **Exclusive Contents**: Header with month period selector, compact 3-metric reference bar (`Saldo tercatat (acuan kas)`, `Pengeluaran`, `Selisih`), `CategoryBudgetSection` (Opsi A), `SavingsGoalSection` (Opsi B), and `DebtRecordSection` (Opsi D).
-  - **Removed Duplication**: Removed the 2-column Hero cards, `TransactionListSection`, and `BackupRestoreSection`.
-- **Tab 4 — `Pengaturan` (`settings`)**:
-  - **Purpose**: Canonical home for opening balance configuration and local data backup/restore maintenance.
-  - **Exclusive Contents**: `Saldo Awal & Penyimpanan Lokal` panel (`Saldo awal tercatat`, `Saldo tercatat saat ini`, `Atur saldo awal` editor, and honest local-storage explanation) and `BackupRestoreSection` (`Cadangan & Pemulihan Data` — sole canonical location for JSON backup export/restore and CSV transaction export).
+## File yang Dibuat / Dimodifikasi pada Milestone M3
 
-## Files changed in Navigation Identity & IA Refinement
+- `src/domain/mosque.ts` (dimodifikasi — Pengurutan `Kas Tunai` sebagai urutan utama pada `getSelectableCashAccounts`)
+- `src/features/transactions/TransactionFormModal.tsx` (dimodifikasi — Input `accountId`, `fundId`, `budgetPlanId`, `donorOrPayee`, `referenceNo`, dan konfirmasi Soft Guard)
+- `src/features/transactions/TransactionListSection.tsx` (dimodifikasi — Filter Dana Masjid & Lokasi Kas serta badge transaksi masjid)
+- `src/features/overview/OverviewFoundationPage.tsx` (dimodifikasi — Integrasi properti kas/dana ke `TransactionFormModal` & `TransactionListSection`, serta badge pada transaksi terakhir di `Ringkasan`)
+- `src/test/mosqueTransactions.test.tsx` (dibuat — Pengujian integrasi transaksi masjid, filter kas/dana, dan Soft Guard)
+- `HANDOFF.md` (dimodifikasi)
 
-- `src/components/layout/AppShell.tsx` (updated — added `settings` / `Pengaturan` to `ActiveRoute` and primary navigation pill)
-- `src/features/overview/OverviewFoundationPage.tsx` (updated — separated `overview`, `transactions`, `planning`, and `settings` into distinct views with zero duplicated sections)
-- `src/test/transactions.test.tsx` (updated — renders `activeRoute="transactions"` for full transaction management tests)
-- `src/test/backup.test.tsx` (updated — renders `activeRoute="settings"` for backup/restore UI workflow tests)
-- `src/test/quality.test.tsx` (updated — verifies navigating across all 4 tabs and asserts exclusive content per tab without cross-tab duplication)
-- `HANDOFF.md` (updated)
+## Pengujian & Verifikasi yang Dijalankan
 
-## Commands/tests actually executed and results
+- `npm.cmd run typecheck` (`tsc -b --noEmit`) — **LULUS (exit code 0)**.
+- `npm.cmd run lint` (`eslint .`) — **LULUS (exit code 0)**.
+- `npm.cmd run test` (`vitest run`) — **LULUS (13 file uji, 67 pengujian lulus)**.
+- `npm.cmd run build` (`tsc -b && vite build`) — **LULUS (exit code 0)**.
 
-- `npm.cmd run typecheck` (`tsc -b --noEmit`) — **PASS** (0 errors).
-- `npm.cmd run lint` (`eslint .`) — **PASS** (0 errors, 0 warnings).
-- `npm.cmd run test` (`vitest run`) — **PASS** (`10 passed` test files, `56 passed` tests total: `18` in `src/test/domain.test.ts`, `7` in `src/test/persistence.test.tsx`, `4` in `src/test/dashboard.test.tsx`, `4` in `src/test/transactions.test.tsx`, `4` in `src/test/backup.test.tsx`, `3` in `src/test/quality.test.tsx`, `4` in `src/test/App.test.tsx`, `4` in `src/test/budget.test.tsx`, `4` in `src/test/savingsGoal.test.tsx`, `4` in `src/test/debtRecord.test.tsx`; 0 warnings).
-- `npm.cmd run build` (`tsc -b && vite build`) — **PASS**:
-  - `dist/index.html`: `0.64 kB` (gzip: `0.38 kB`)
-  - `dist/assets/index-BCeIUrTo.css`: `34.98 kB` (gzip: `6.27 kB`)
-  - `dist/assets/index-B5YnCc35.js`: `495.38 kB` (gzip: `135.52 kB` — well within the `<= 250 kB` gzip budget)
+## Isu yang Diketahui / Risiko Tersisa
 
-## Known limitations
+- Tab `Anggaran / RAB` saat ini masih menampilkan komponen perencanaan lama dan akan digantikan/diperluas dengan manajemen **Anggaran / RAB Masjid (`BudgetPlan` per Dana & Kategori beserta realisasi anggaran)** pada **Milestone M4**.
+- Tab `Laporan` saat ini menampilkan ringkasan awal dan akan dilengkapi dengan tabel pertanggungjawaban kas per Dana & Lokasi Kas, ekspor CSV, serta tata letak cetak pengumuman jamaah (`@media print`) pada **Milestone M5**.
 
-- Automated headless browser screenshot capture is not installed in this environment; manual visual verification can be performed immediately at `http://localhost:5173/` (`npm.cmd run dev`).
-- Local IndexedDB (`nota_local_db`) is not automatically encrypted at rest and will be cleared if browser site data is wiped without exporting a JSON backup first.
+## Langkah Selanjutnya yang Direkomendasikan
 
-## Recommended next step
-
-- Inspect the 4 distinct navigation tabs (`Ringkasan`, `Transaksi`, `Perencanaan`, `Pengaturan`) in the live dev server (`http://localhost:5173/`) and confirm whether any further UI polish or **Opsi C (`Pengingat Tagihan / Iuran Berulang`)** is desired.
+- Lanjutkan ke **Milestone M4 — Halaman `Anggaran / RAB` Masjid & Realisasi Anggaran**:
+  1. Membuat komponen manajemen **RAB / Anggaran Masjid (`BudgetPlan`)** pada tab `Anggaran / RAB` yang terhubung dengan periode (`YYYY-MM`), Dana (`fundId`), Kategori pengeluaran (`categoryId`), nominal rencana (`plannedAmount`), dan catatan kegiatan.
+  2. Menampilkan progres realisasi anggaran (`calculateBudgetRealizations`) dari transaksi pengeluaran yang terjadi pada periode/dana/kategori atau yang ditautkan langsung melalui `budgetPlanId`.

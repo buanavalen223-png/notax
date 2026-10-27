@@ -122,8 +122,10 @@ describe('Nota Milestone 6 — Quality, Accessibility, Reliability & Race-Condit
       }),
     ).not.toBeInTheDocument();
 
-    // Navigate to 'Perencanaan' route in AppShell and verify distinct planning identity
-    const planNavBtn = screen.getByRole('button', { name: /^Perencanaan$/i });
+    // Navigate to 'Anggaran / RAB' route in AppShell and verify distinct planning identity
+    const planNavBtn = screen.getByRole('button', {
+      name: /^Anggaran \/ RAB$/i,
+    });
     fireEvent.click(planNavBtn);
     expect(planNavBtn).toHaveAttribute('aria-current', 'page');
     expect(

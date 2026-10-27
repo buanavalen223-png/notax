@@ -12,6 +12,12 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
+  type CashAccount,
+  DEFAULT_CASH_ACCOUNT_TUNAI_ID,
+  DEFAULT_FUND_OPERASIONAL_ID,
+  type Fund,
+} from '../../domain/mosque';
+import {
   type TransactionFilterCriteria,
   type TransactionSortOrder,
   filterTransactions,
@@ -30,6 +36,8 @@ export type PeriodFilterMode = 'all' | 'selected-month';
 export interface TransactionListSectionProps {
   transactions: readonly Transaction[];
   categories: readonly Category[];
+  accounts?: readonly CashAccount[];
+  funds?: readonly Fund[];
   selectedPeriod: DateRangePeriod;
   periodLabel: string;
   onEditTransaction: (transaction: Transaction) => void;
@@ -41,6 +49,8 @@ export interface TransactionListSectionProps {
 export function TransactionListSection({
   transactions,
   categories,
+  accounts = [],
+  funds = [],
   selectedPeriod,
   periodLabel,
   onEditTransaction,
@@ -52,12 +62,16 @@ export function TransactionListSection({
   const periodFilterId = useId();
   const typeFilterId = useId();
   const categoryFilterId = useId();
+  const fundFilterId = useId();
+  const accountFilterId = useId();
   const sortOrderId = useId();
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [periodMode, setPeriodMode] = useState<PeriodFilterMode>('all');
   const [typeFilter, setTypeFilter] = useState<TransactionType | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [fundFilter, setFundFilter] = useState<string>('all');
+  const [accountFilter, setAccountFilter] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<TransactionSortOrder>('newest');
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -73,6 +87,32 @@ export function TransactionListSection({
         ]),
       ),
     [categories],
+  );
+
+  const accountMap = useMemo(
+    () =>
+      new Map(
+        accounts.map((acc) => [
+          acc.id,
+          { name: acc.name, kind: acc.kind, isArchived: Boolean(acc.archivedAt) },
+        ]),
+      ),
+    [accounts],
+  );
+
+  const fundMap = useMemo(
+    () =>
+      new Map(
+        funds.map((fund) => [
+          fund.id,
+          {
+            name: fund.name,
+            restriction: fund.restriction,
+            isArchived: Boolean(fund.archivedAt),
+          },
+        ]),
+      ),
+    [funds],
   );
 
   const filterableCategories = useMemo(() => {
@@ -97,6 +137,8 @@ export function TransactionListSection({
       period: periodMode === 'selected-month' ? selectedPeriod : undefined,
       type: typeFilter === 'all' ? undefined : typeFilter,
       categoryId: effectiveCategoryFilter,
+      fundId: fundFilter === 'all' ? undefined : fundFilter,
+      accountId: accountFilter === 'all' ? undefined : accountFilter,
       searchQuery: searchQuery.trim() ? searchQuery : undefined,
     };
 
@@ -109,6 +151,8 @@ export function TransactionListSection({
     selectedPeriod,
     typeFilter,
     effectiveCategoryFilter,
+    fundFilter,
+    accountFilter,
     searchQuery,
     sortOrder,
   ]);
@@ -118,6 +162,8 @@ export function TransactionListSection({
     periodMode !== 'all' ||
     typeFilter !== 'all' ||
     effectiveCategoryFilter !== undefined ||
+    fundFilter !== 'all' ||
+    accountFilter !== 'all' ||
     sortOrder !== 'newest';
 
   function handleResetFilters() {
@@ -125,6 +171,8 @@ export function TransactionListSection({
     setPeriodMode('all');
     setTypeFilter('all');
     setCategoryFilter('all');
+    setFundFilter('all');
+    setAccountFilter('all');
     setSortOrder('newest');
   }
 
@@ -204,7 +252,7 @@ export function TransactionListSection({
             <input
               id={searchInputId}
               type="search"
-              placeholder="Cari catatan atau kategori..."
+              placeholder="Cari catatan, donatur, bukti, atau kategori..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-control border border-nota-border bg-nota-bg py-2 pl-9 pr-3 text-xs sm:text-sm text-nota-ink placeholder:text-nota-muted/70 focus:border-nota-emerald focus:bg-nota-surface"
@@ -304,6 +352,60 @@ export function TransactionListSection({
             </select>
           </div>
         </div>
+
+        {/* Mosque Fund & Cash Account Filters */}
+        {funds.length > 0 || accounts.length > 0 ? (
+          <>
+            {funds.length > 0 ? (
+              <div className="lg:col-span-6">
+                <label htmlFor={fundFilterId} className="sr-only">
+                  Filter dana masjid
+                </label>
+                <select
+                  id={fundFilterId}
+                  aria-label="Filter dana masjid"
+                  value={fundFilter}
+                  onChange={(e) => setFundFilter(e.target.value)}
+                  className="w-full rounded-control border border-nota-border bg-nota-bg px-3 py-2 text-xs sm:text-sm font-medium text-nota-ink focus:border-nota-emerald focus:bg-nota-surface"
+                >
+                  <option value="all">Semua dana masjid</option>
+                  {funds.map((fund) => (
+                    <option key={fund.id} value={fund.id}>
+                      {fund.name}
+                      {fund.restriction === 'restricted'
+                        ? ' (Dana Terikat)'
+                        : ' (Dana Umum)'}
+                      {fund.archivedAt ? ' (Arsip)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {accounts.length > 0 ? (
+              <div className="lg:col-span-6">
+                <label htmlFor={accountFilterId} className="sr-only">
+                  Filter lokasi kas
+                </label>
+                <select
+                  id={accountFilterId}
+                  aria-label="Filter lokasi kas"
+                  value={accountFilter}
+                  onChange={(e) => setAccountFilter(e.target.value)}
+                  className="w-full rounded-control border border-nota-border bg-nota-bg px-3 py-2 text-xs sm:text-sm font-medium text-nota-ink focus:border-nota-emerald focus:bg-nota-surface"
+                >
+                  <option value="all">Semua lokasi kas</option>
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name}
+                      {acc.archivedAt ? ' (Arsip)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </div>
 
       {/* Transaction List or Empty States */}
@@ -368,13 +470,19 @@ export function TransactionListSection({
             const categoryInfo = categoryMap.get(tx.categoryId);
             const categoryName =
               categoryInfo?.name ?? 'Kategori tidak dikenal';
+            const fundInfo = fundMap.get(
+              tx.fundId ?? DEFAULT_FUND_OPERASIONAL_ID,
+            );
+            const accountInfo = accountMap.get(
+              tx.accountId ?? DEFAULT_CASH_ACCOUNT_TUNAI_ID,
+            );
             const isIncome = tx.type === 'income';
             const isConfirmingDelete = confirmDeleteId === tx.id;
 
             return (
               <li key={tx.id} className="py-3.5 space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  {/* Left: Icon, Category, Date, Note */}
+                  {/* Left: Icon, Category, Mosque Badges, Date, Note */}
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-control ${
@@ -391,7 +499,7 @@ export function TransactionListSection({
                       )}
                     </div>
 
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-sm font-medium text-nota-ink truncate">
                           {categoryName}
@@ -401,9 +509,31 @@ export function TransactionListSection({
                             Arsip
                           </span>
                         ) : null}
+                        {fundInfo ? (
+                          <span
+                            className={`rounded-control px-1.5 py-0.5 text-[10px] font-medium shrink-0 ${
+                              fundInfo.restriction === 'restricted'
+                                ? 'border border-nota-ink/20 bg-nota-surface text-nota-ink'
+                                : 'bg-nota-soft-green text-nota-emerald'
+                            }`}
+                          >
+                            {fundInfo.name}
+                          </span>
+                        ) : null}
+                        {accountInfo ? (
+                          <span className="rounded-control border border-nota-border bg-nota-surface px-1.5 py-0.5 text-[10px] font-medium text-nota-muted shrink-0">
+                            {accountInfo.name}
+                          </span>
+                        ) : null}
                       </div>
                       <p className="text-xs text-nota-muted truncate">
                         <span>{formatLocalDateID(tx.occurredAt)}</span>
+                        {tx.donorOrPayee ? (
+                          <span> · {tx.donorOrPayee}</span>
+                        ) : null}
+                        {tx.referenceNo ? (
+                          <span> · #{tx.referenceNo}</span>
+                        ) : null}
                         {tx.note ? <span> · {tx.note}</span> : null}
                       </p>
                     </div>

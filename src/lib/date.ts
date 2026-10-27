@@ -175,3 +175,35 @@ export function isDateWithinPeriod(occurredAt: string, period: DateRangePeriod):
   }
   return occurredAt >= period.startDate && occurredAt <= period.endDate;
 }
+
+/**
+ * Shifts a `YYYY-MM-DD` local date string by `deltaDays` (positive or negative)
+ * using local calendar arithmetic so daylight saving / UTC offsets never skew the day.
+ */
+export function shiftLocalDate(dateStr: string, deltaDays: number): string {
+  if (!Number.isInteger(deltaDays)) {
+    throw new RangeError('Perubahan hari harus berupa bilangan bulat.');
+  }
+  const d = parseLocalDateString(dateStr);
+  d.setDate(d.getDate() + deltaDays);
+  return toLocalDateString(d);
+}
+
+/**
+ * Returns an inclusive rolling period of `days` ending on `endDateStr`
+ * (e.g., `days = 7` for a 7-day / Friday-to-Friday Mosque Cash Report).
+ */
+export function getRollingDaysPeriod(
+  endDateStr: string = toLocalDateString(new Date()),
+  days: number = 7,
+): DateRangePeriod {
+  if (!Number.isInteger(days) || days < 1 || days > 366) {
+    throw new RangeError('Jumlah hari rentang laporan harus antara 1 dan 366.');
+  }
+  const startDate = shiftLocalDate(endDateStr, -(days - 1));
+  return {
+    startDate,
+    endDate: endDateStr,
+  };
+}
+

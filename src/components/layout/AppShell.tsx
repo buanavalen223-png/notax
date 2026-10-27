@@ -1,12 +1,19 @@
 import type { ReactNode } from 'react';
 import { Calendar } from 'lucide-react';
 
-export type ActiveRoute = 'overview' | 'transactions' | 'planning' | 'settings';
+export type ActiveRoute =
+  | 'overview'
+  | 'transactions'
+  | 'cash-and-funds'
+  | 'planning'
+  | 'reports'
+  | 'settings';
 
 interface AppShellProps {
   activeRoute: ActiveRoute;
   onNavigate?: (route: ActiveRoute) => void;
   periodLabel?: string;
+  mosqueName?: string;
   children: ReactNode;
 }
 
@@ -14,6 +21,7 @@ export function AppShell({
   activeRoute,
   onNavigate,
   periodLabel,
+  mosqueName,
   children,
 }: AppShellProps) {
   return (
@@ -27,7 +35,7 @@ export function AppShell({
       </a>
 
       {/* Top Navigation & Workspace Header */}
-      <header className="w-full bg-nota-bg/95 backdrop-blur-xs sticky top-0 z-20">
+      <header className="w-full bg-nota-bg/95 backdrop-blur-xs sticky top-0 z-20 print:hidden">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 pt-4 pb-3 sm:px-6 lg:px-8">
           {/* Left: Brand Identity */}
           <div className="flex items-center gap-2.5 min-w-0">
@@ -37,13 +45,20 @@ export function AppShell({
             >
               N
             </div>
-            <span className="text-lg font-semibold tracking-tight text-nota-ink">
-              Nota
-            </span>
+            <div className="flex items-baseline gap-2 min-w-0">
+              <span className="text-lg font-semibold tracking-tight text-nota-ink">
+                Nota
+              </span>
+              {mosqueName ? (
+                <span className="text-xs font-medium text-nota-muted truncate max-w-[200px] sm:max-w-[280px]">
+                  · {mosqueName}
+                </span>
+              ) : null}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Primary Navigation Pill (inspired by visual reference) */}
+            {/* Primary Navigation Pill (6 Tabs per DESIGN_BRIEF.md §3) */}
             <nav
               aria-label="Navigasi utama"
               className="flex flex-wrap items-center gap-1 rounded-control bg-nota-surface/80 p-1 border border-nota-border/70"
@@ -54,8 +69,8 @@ export function AppShell({
                 aria-current={activeRoute === 'overview' ? 'page' : undefined}
                 className={
                   activeRoute === 'overview'
-                    ? 'rounded-control bg-nota-lime px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold text-nota-ink transition-colors cursor-pointer'
-                    : 'rounded-control px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-medium text-nota-muted hover:text-nota-ink transition-colors cursor-pointer'
+                    ? 'rounded-control bg-nota-lime px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-nota-ink transition-colors cursor-pointer'
+                    : 'rounded-control px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-medium text-nota-muted hover:text-nota-ink transition-colors cursor-pointer'
                 }
               >
                 Ringkasan
@@ -69,11 +84,26 @@ export function AppShell({
                 }
                 className={
                   activeRoute === 'transactions'
-                    ? 'rounded-control bg-nota-lime px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold text-nota-ink transition-colors cursor-pointer'
-                    : 'rounded-control px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-medium text-nota-muted hover:text-nota-ink transition-colors cursor-pointer'
+                    ? 'rounded-control bg-nota-lime px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-nota-ink transition-colors cursor-pointer'
+                    : 'rounded-control px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-medium text-nota-muted hover:text-nota-ink transition-colors cursor-pointer'
                 }
               >
                 Transaksi
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onNavigate?.('cash-and-funds')}
+                aria-current={
+                  activeRoute === 'cash-and-funds' ? 'page' : undefined
+                }
+                className={
+                  activeRoute === 'cash-and-funds'
+                    ? 'rounded-control bg-nota-lime px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-nota-ink transition-colors cursor-pointer'
+                    : 'rounded-control px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-medium text-nota-muted hover:text-nota-ink transition-colors cursor-pointer'
+                }
+              >
+                Kas & Dana
               </button>
 
               <button
@@ -82,11 +112,24 @@ export function AppShell({
                 aria-current={activeRoute === 'planning' ? 'page' : undefined}
                 className={
                   activeRoute === 'planning'
-                    ? 'rounded-control bg-nota-lime px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold text-nota-ink transition-colors cursor-pointer'
-                    : 'rounded-control px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-medium text-nota-muted hover:text-nota-ink transition-colors cursor-pointer'
+                    ? 'rounded-control bg-nota-lime px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-nota-ink transition-colors cursor-pointer'
+                    : 'rounded-control px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-medium text-nota-muted hover:text-nota-ink transition-colors cursor-pointer'
                 }
               >
-                Perencanaan
+                Anggaran / RAB
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onNavigate?.('reports')}
+                aria-current={activeRoute === 'reports' ? 'page' : undefined}
+                className={
+                  activeRoute === 'reports'
+                    ? 'rounded-control bg-nota-lime px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-nota-ink transition-colors cursor-pointer'
+                    : 'rounded-control px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-medium text-nota-muted hover:text-nota-ink transition-colors cursor-pointer'
+                }
+              >
+                Laporan
               </button>
 
               <button
@@ -95,8 +138,8 @@ export function AppShell({
                 aria-current={activeRoute === 'settings' ? 'page' : undefined}
                 className={
                   activeRoute === 'settings'
-                    ? 'rounded-control bg-nota-lime px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold text-nota-ink transition-colors cursor-pointer'
-                    : 'rounded-control px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-medium text-nota-muted hover:text-nota-ink transition-colors cursor-pointer'
+                    ? 'rounded-control bg-nota-lime px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-nota-ink transition-colors cursor-pointer'
+                    : 'rounded-control px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-medium text-nota-muted hover:text-nota-ink transition-colors cursor-pointer'
                 }
               >
                 Pengaturan
